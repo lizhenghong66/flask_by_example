@@ -14,7 +14,10 @@ from ch10.user import User
 
 from flask_login import current_user
 import ch10.config as config
+#from ch10.bitlyhelper import BitlyHelper
+from ch10.mockbitlyhelper import MockBitlyHelper as BitlyHelper
 
+import datetime
 
 app = Flask(__name__)
 app.secret_key = 'tPXJY3X37Qybz4QykV+hOyUxVQeEXf1Ao2C8upz+fGQXKsM'
@@ -22,7 +25,7 @@ login_manager = LoginManager(app)
 
 DB = DBHelper()
 PH = PasswordHelper()
-
+BH = BitlyHelper()
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -72,7 +75,20 @@ def home():
 @app.route("/dashboard")
 @login_required
 def dashboard():
-    return render_template("dashboard.html")
+    now = datetime.datetime.now()
+    requests = DB.get_requests(current_user.get_id())
+    for req in requests:
+        deltaseconds = (now - req['time']).seconds
+        req['wait_minutes'] = "{}.{}".format((deltaseconds // 60),
+                                         str(deltaseconds % 60).zfill(2))
+    return render_template("dashboard.html",requests=requests)
+
+@app.route("/dashboard/resolve")
+@login_required
+def dashboard_resolve():
+    request_id = request.args.get("request_id")
+    DB.delete_request(request_id)
+    return redirect(url_for('dashboard'))
 
 @app.route("/account")
 @login_required
@@ -85,7 +101,9 @@ def account():
 def account_createtable():
     tablename = request.form.get("tablenumber")
     tableid = DB.add_table(tablename, current_user.get_id())
-    new_url = config.base_url + "newrequest/" + tableid
+    #new_url = config.base_url + "newrequest/" + tableid
+    new_url = BH.shorten_url(config.base_url + "newrequest/" +
+                             tableid)
     DB.update_table(tableid, new_url)
     return redirect(url_for('account'))
 
@@ -95,6 +113,11 @@ def account_deletetable():
     tableid = request.args.get("tableid")
     DB.delete_table(tableid)
     return redirect(url_for('account'))
+
+@app.route("/newrequest/<tid>")
+def new_request(tid):
+    DB.add_request(tid, datetime.datetime.now())
+    return "Your request has been logged and a waiter will be with you shortly"
 
 if __name__ == '__main__':
     app.run(port=5000, debug=True)
