@@ -8,24 +8,24 @@ from flask_login import login_required
 from flask_login import login_user
 from flask_login import logout_user
 
-from ch10.passwordhelper import PasswordHelper
-from ch10.user import User
+from ch11.passwordhelper import PasswordHelper
+from ch11.user import User
 
 from flask_login import current_user
-import ch10.config as config
-#from ch10.bitlyhelper import BitlyHelper
-from ch10.mockbitlyhelper import MockBitlyHelper as BitlyHelper
+import ch11.config as config
+#from ch11.bitlyhelper import BitlyHelper
+from ch11.mockbitlyhelper import MockBitlyHelper as BitlyHelper
 
 import datetime
 
-from ch10.forms import RegistrationForm
-from ch10.forms import LoginForm
-from ch10.forms import CreateTableForm
+from ch11.forms import RegistrationForm
+from ch11.forms import LoginForm
+from ch11.forms import CreateTableForm
 
 if config.test:
-    from ch10.mockdbhelper import MockDBHelper as DBHelper
+    from ch11.mockdbhelper import MockDBHelper as DBHelper
 else:
-    from ch10.dbhelper import DBHelper
+    from ch11.dbhelper import DBHelper
 
 app = Flask(__name__)
 app.secret_key = 'tPXJY3X37Qybz4QykV+hOyUxVQeEXf1Ao2C8upz+fGQXKsM'
@@ -63,13 +63,13 @@ def register():
     if form.validate():
         if DB.get_user(form.email.data):
             form.email.errors.append("Email address already registered")
-            return render_template('home.html', registrationform=form)
+            return render_template("home.html", loginform=LoginForm(), registrationform=form)
         salt = PH.get_salt().decode("utf8")
         hashed = PH.get_hash((form.password2.data + salt).encode("utf8"))
         DB.add_user(form.email.data, salt, hashed)
-        return render_template("home.html", registrationform=form,
+        return render_template("home.html", loginform=LoginForm(), registrationform=form,
                                onloadmessage="Registration successful. Please log in.")
-    return render_template("home.html", registrationform=form)
+    return render_template("home.html", loginform=LoginForm(), registrationform=form)
 
 
 @app.route("/logout")
@@ -116,7 +116,7 @@ def account_createtable():
         tableid = DB.add_table(form.tablenumber.data,
                                current_user.get_id())
         new_url = BH.shorten_url(config.base_url + "newrequest/" +
-                             tableid)
+                                 (tableid if isinstance(tableid,str) else str(tableid)))
         DB.update_table(tableid, new_url)
         return redirect(url_for('account'))
     return render_template("account.html", createtableform=form,
@@ -131,8 +131,11 @@ def account_deletetable():
 
 @app.route("/newrequest/<tid>")
 def new_request(tid):
-    DB.add_request(tid, datetime.datetime.now())
-    return "Your request has been logged and a waiter will be with you shortly"
+    if DB.add_request(tid, datetime.datetime.now()):
+        return "Your request has been logged and a waiter will be with you shortly"
+    return "There is already a request " \
+           "pending for this table.Please " \
+           "be patient, a waiter will be there ASAP"
 
 if __name__ == '__main__':
     app.run(port=5000, debug=True)
